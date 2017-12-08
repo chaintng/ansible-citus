@@ -1,0 +1,16 @@
+---
+- name: Update Citus Patch version
+  hosts: citus
+  become: yes
+  become_method: sudo
+  
+  tasks:
+    - name: Update patch version
+      shell: yum -y update citus71_96
+
+    - name: Restart PostgreSQL
+      service:
+        name: postgresql-9.6
+        state: restarted
+
+  environment: "{{env_proxy}}"

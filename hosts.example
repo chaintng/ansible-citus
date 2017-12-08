@@ -1,0 +1,17 @@
+[citus:children]
+citus_master
+citus_worker
+
+[citus_master:children]
+citus_master_main
+citus_master_repl
+
+[citus_master_main]
+x.x.x.x
+
+[citus_master_repl]
+y.y.y.y
+
+[citus_worker]
+a.a.a.a
+b.b.b.b

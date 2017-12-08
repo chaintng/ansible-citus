@@ -1,0 +1,23 @@
+---
+- name: Update Citus minor version
+  hosts: citus
+  become: yes
+  become_method: sudo
+  
+  tasks:
+    - name: Swap minor version
+      shell: yum -y swap citus70_96 citus71_96
+
+    - name: Restart PostgreSQL
+      service:
+        name: postgresql-9.6
+        state: restarted
+    
+    - name: Alter citus extension
+      become: yes
+      become_method: sudo
+      become_user: postgres
+      shell: "psql -c 'ALTER EXTENSION citus UPDATE;' {{db_name}}"
+      when: "'citus_master_repl' not in group_names"
+
+  environment: "{{env_proxy}}"

@@ -1,0 +1,9 @@
+---
+- name: Install PostgreSQL, Citus, repmgr
+  hosts: citus
+  become: yes
+  become_method: sudo
+  roles:
+    - postgresql
+
+  environment: "{{env_proxy}}"

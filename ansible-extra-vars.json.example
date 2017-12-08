@@ -1,0 +1,14 @@
+{
+    "db_user": "temp_user",
+    "db_password": "temp_password",
+    "db_name": "temp_db",
+    "shard_count": 32,
+    "replication_factor": 2,
+    "tuning_postgres": false,
+    "citus_master_main": "x.x.x.x",
+    "citus_master_repl": "y.y.y.y",
+    "worker_list": [
+        "a.a.a.a",
+        "b.b.b.b"
+    ]
+}

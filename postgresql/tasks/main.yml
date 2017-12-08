@@ -1,0 +1,338 @@
+---
+
+## Install services (PostgreSQL, ctius and repmgr)
+- name: yum |  Setup PostgreSQL repository for {{ ansible_distribution }}
+  become: yes
+  yum:
+    name: "{{ item }}"
+    state: installed
+  with_items:
+    - https://download.postgresql.org/pub/repos/yum/9.6/redhat/rhel-7-x86_64/pgdg-centos96-9.6-3.noarch.rpm
+    - http://packages.2ndquadrant.com/repmgr/yum-repo-rpms/repmgr-rhel-1.0-1.noarch.rpm
+  when: ansible_distribution == "CentOS"
+  tags: [db, postgresql]
+
+- name: add repmgr rpm GPG key
+  rpm_key:
+      state: present
+      key: http://packages.2ndquadrant.com/repmgr/RPM-GPG-KEY-repmgr
+
+- name: Download citus install script
+  get_url: 
+    url: https://install.citusdata.com/community/rpm.sh
+    dest: /tmp/citus-rpm.sh
+    mode: 0755
+
+- name: yum | Setup Citus repository for {{ ansible_distribution }}
+  become: yes
+  shell: /tmp/citus-rpm.sh
+
+- name: yum | Install PostgreSQL and Citus
+  yum:
+    name: "{{ item }}"
+    state: installed
+  with_items:
+    - postgresql96-server
+    - postgresql96-contrib
+    - postgresql96-devel
+    - citus71_96
+  register: install_postgresql
+  tags: [db, postgresql]
+
+- name: add postgres bin path
+  lineinfile:
+    path: /etc/profile
+    line: "PATH=$PATH:/usr/pgsql-9.6/bin/"
+
+- name: yum | Install repmgr
+  yum:
+    name: repmgr96
+    state: installed
+  tags: [db, postgresql]
+  when: "'citus_worker' not in group_names"
+
+## Initialize PostgreSQL
+- name: yum | Initialize PostgreSQL
+  become: yes
+  become_method: sudo
+  command: /usr/pgsql-9.6/bin/postgresql96-setup initdb
+  when:
+    - install_postgresql.changed
+    - "'citus_master_repl' not in group_names"
+  tags: [db, postgresql]
+
+## Setup replication configuration
+- name: copy postgresql.replication.conf
+  copy:
+    src: files/postgresql.replication.conf
+    dest: /var/lib/pgsql/9.6/data/postgresql.replication.conf
+    owner: postgres
+    group: postgres
+  when: "'citus_master_main' in group_names"
+
+- name: add repmgr in pg_hba.conf for citus master
+  lineinfile:
+    path: /var/lib/pgsql/9.6/data/pg_hba.conf
+    line: "{{ item }}"
+  with_items:
+    - local   replication   repmgr                              trust
+    - host    replication   repmgr      127.0.0.1/32            trust
+    - host    replication   repmgr      10.0.0.0/8          trust
+    - local   repmgr        repmgr                              trust
+    - host    repmgr        repmgr      127.0.0.1/32            trust
+    - host    repmgr        repmgr      10.0.0.0/8          trust
+    - host    all             all             10.0.0.1/8            md5
+    - host    all             all             127.0.0.1/32            md5
+  notify:
+    - Restart PostgreSQL
+  when: "'citus_master_main' in group_names"
+
+- name: add local TRUST for worker node # until https://github.com/citusdata/citus/issues/1822 fixed
+  lineinfile:
+    path: /var/lib/pgsql/9.6/data/pg_hba.conf
+    line: "{{ item }}"
+  with_items:
+    - host    all             all             10.0.0.1/8            trust
+    - host    all             all             127.0.0.1/32            md5
+  notify:
+    - Restart PostgreSQL
+  when: "'citus_worker' in group_names"
+
+- name: add citus shared_preload_libraries, shared_replication_factor, shard_count
+  become: yes
+  become_method: sudo
+  lineinfile:
+    path: /var/lib/pgsql/9.6/data/postgresql.conf
+    line: "{{ item }}"
+  with_items:
+    - "shared_preload_libraries = 'citus,pg_stat_statements'"
+    - "citus.shard_replication_factor = {{ replication_factor }}"
+    - "citus.shard_count = {{ shard_count }}"
+    - "pg_stat_statements.track = all"
+  notify:
+  - Restart PostgreSQL
+  when: "'citus_master_repl' not in group_names"
+
+- name: include postgresql.replication.conf
+  lineinfile:
+    path: /var/lib/pgsql/9.6/data/postgresql.conf
+    line: "include 'postgresql.replication.conf'"
+  notify:
+  - Restart PostgreSQL
+  when: "'citus_master_main' in group_names"
+
+- name: Trust postgres in Citus Master & Worker Nodes
+  become: yes
+  become_method: sudo
+  replace:
+    dest: /var/lib/pgsql/9.6/data/pg_hba.conf
+    regexp: ^(host.*all.*all.*)(127.0.0.1\/32)(.*)ident$
+    replace: host\tall\tpostgres\t127.0.0.1/32\ttrust
+  notify:
+  - Restart PostgreSQL
+  tags: [db, postgresql]
+  when: "'citus_master_repl' not in group_names"
+
+- name: yum | MD5-encrypted password for PostgreSQL 2
+  become: yes
+  become_method: sudo
+  replace:
+    dest: /var/lib/pgsql/9.6/data/pg_hba.conf
+    regexp: ^(host.*all.*all.*::1\/128.*)ident$
+    replace: \1md5
+  notify:
+  - Restart PostgreSQL
+  tags: [db, postgresql]
+  when: "'citus_master_repl' not in group_names"
+
+- name: yum | Ensure PostgreSQL is listening on all localhost
+  become: yes
+  become_method: sudo
+  replace:
+    dest: /var/lib/pgsql/9.6/data/postgresql.conf
+    regexp: '^#?listen_addresses\s*=\s*''localhost'''
+    replace: 'listen_addresses = ''*'''
+  notify:
+  - Restart PostgreSQL
+  tags: [db, postgresql]
+  when: "'citus_master_repl' not in group_names"
+
+- name: Touch .pgpass file
+  file:
+    path: /var/lib/pgsql/.pgpass
+    state: touch
+    mode: 0600
+    group: postgres
+    owner: postgres
+  when: "'citus_master_repl' not in group_names"
+  
+- name: Add postgres credential in .pgpass file
+  lineinfile:
+    path: /var/lib/pgsql/.pgpass
+    line: "{{ item }}:5432:{{ db_name }}:{{ db_user }}:{{ db_password }}"
+  with_items:
+    - "{{ worker_list }}"
+  when: "'citus_master_repl' not in group_names"
+
+- name: yum | Start and Enable PostgreSQL
+  become: yes
+  become_method: sudo
+  service:
+    name: postgresql-9.6
+    state: started
+    enabled: yes
+  tags: [db, postgresql]
+  when: "'citus_master_repl' not in group_names"
+
+## Setup replication manager user
+- name: Check if repmgr user existed
+  shell: psql -U postgres -h 127.0.0.1 -c "SELECT COUNT(*) FROM pg_roles WHERE rolname='repmgr'" | sed -n '3p' | sed -e 's/^[ \t]*//' # TODO
+  register: has_repmgr_user
+  when: ("'citus_master_main' in group_names")
+
+- name: create repmgr user
+  become: yes
+  become_method: sudo
+  become_user: postgres
+  shell: createuser -s repmgr
+  when: 
+    - "'citus_master_main' in group_names"
+    - has_repmgr_user.stdout == "0"
+
+- name: Check if repmgr database existed
+  shell: psql -U postgres -h 127.0.0.1 -c "SELECT COUNT(*) FROM pg_database WHERE datname='repmgr'" | sed -n '3p' | sed -e 's/^[ \t]*//'
+  register: has_repmgr_database
+
+- name: create repmgr db
+  become: yes
+  become_method: sudo
+  become_user: postgres
+  shell: createdb repmgr -O repmgr
+  when:
+    - "'citus_master_main' in group_names"
+    - has_repmgr_database.stdout == "0"
+  
+- name: alter user repmgr
+  become: yes
+  become_method: sudo
+  become_user: postgres
+  shell: psql -c 'ALTER USER repmgr SET search_path TO repmgr, "$user", public;'
+  when: "'citus_master_main' in group_names"
+
+## Init BCRM database
+- name: Check if database existed
+  shell: psql -U postgres -h 127.0.0.1 -c "SELECT COUNT(*) FROM pg_database WHERE datname='{{ db_name }}'" | sed -n '3p' | sed -e 's/^[ \t]*//' # TODO
+  register: has_database
+  when: "'citus_master_repl' not in group_names"
+
+- name: Create database only when no database
+  shell: psql -U postgres -h 127.0.0.1 -c "CREATE DATABASE \"{{ db_name }}\""
+  when: 
+    - "'citus_master_repl' not in group_names"
+    - has_database.stdout == "0"
+
+- name: Create citus extension
+  shell: psql -U postgres -h 127.0.0.1 -c "CREATE EXTENSION IF NOT EXISTS citus" {{ db_name }}
+  when: "'citus_master_repl' not in group_names"
+
+- name: Check if user existed
+  shell: psql -U postgres -h 127.0.0.1 -c "SELECT COUNT(*) FROM pg_roles WHERE rolname='{{ db_user }}'" | sed -n '3p' | sed -e 's/^[ \t]*//' # TODO
+  register: has_user
+  when: "'citus_master_repl' not in group_names"
+
+- name: Create users
+  shell: psql -U postgres -h 127.0.0.1 -c "CREATE ROLE \"{{ db_user }}\" WITH SUPERUSER LOGIN PASSWORD '{{ db_password }}'"
+  when:
+    - "'citus_master_repl' not in group_names"
+    - has_user.stdout == "0"
+  
+- name: Add worker in master
+  shell: psql -U postgres -h 127.0.0.1 -c "SELECT * from master_add_node('{{ item }}', 5432);" {{ db_name }}
+  with_items:
+    - "{{ worker_list }}"
+  when: "'citus_master_main' in group_names"
+
+## repmgr cluster setup
+
+- name: Move repmgr.conf to template
+  command: mv /etc/repmgr/9.6/repmgr.conf /etc/repmgr/9.6/repmgr.conf.template
+  when: "'citus_worker' not in group_names"
+  ignore_errors: yes
+
+- name: Copy repmgr.conf to master main config
+  template:
+    src: files/repmgr-main.conf.j2
+    dest: /etc/repmgr.conf
+    owner: postgres
+    group: postgres
+  when: "'citus_master_main' in group_names"
+
+- name: Copy repmgr.conf to master repl config
+  template:
+    src: files/repmgr-repl.conf.j2
+    dest: /etc/repmgr.conf
+    owner: postgres
+    group: postgres
+  when: "'citus_master_repl' in group_names"
+
+- name: Register master main in repmgr
+  become: yes
+  become_method: sudo
+  become_user: postgres
+  shell: /usr/pgsql-9.6/bin/repmgr -F primary register
+  when: "'citus_master_main' in group_names"
+
+- name: check if postgres data is existed
+  stat: path=/var/lib/pgsql/9.6/data/postgresql.conf
+  register: data_existed
+  when: "'citus_master_repl' in group_names"
+
+- name: Clone citus master main to replica
+  become: yes
+  become_method: sudo
+  become_user: postgres
+  command: /usr/pgsql-9.6/bin/repmgr -h {{ citus_master_main }} -U repmgr -d repmgr standby clone
+  when: 
+    - "'citus_master_repl' in group_names"
+    - data_existed.stat.exists == False
+
+## Tuning postgres configuration
+- name: copy postgresql.tuning.conf
+  copy:
+    src: files/postgresql.tuning.conf
+    dest: /var/lib/pgsql/9.6/data/postgresql.tuning.conf
+    owner: postgres
+    group: postgres
+  when: tuning_postgres == true
+
+- name: include postgresql.tuning.conf
+  lineinfile:
+    path: /var/lib/pgsql/9.6/data/postgresql.conf
+    line: "include 'postgresql.tuning.conf'"
+  notify:
+  - Restart PostgreSQL
+  when: tuning_postgres == true
+
+- name: config semaphore value
+  lineinfile:
+    path: /etc/sysctl.d/90-sample.conf
+    line: "kernel.sem = 250 512000 100 2048"
+  when: tuning_postgres == true
+
+- name: apply semaphore value
+  shell: "/sbin/sysctl -p /etc/sysctl.d/90-sample.conf"
+  when: tuning_postgres == true
+
+- name: Start and Enable PostgreSQL
+  service:
+    name: postgresql-9.6
+    state: started
+    enabled: yes
+  when: "'citus_master_repl' in group_names"
+
+- name: Register master repl in repmgr
+  become: yes
+  become_method: sudo
+  become_user: postgres
+  command: /usr/pgsql-9.6/bin/repmgr -F standby register
+  when: "'citus_master_repl' in group_names"
