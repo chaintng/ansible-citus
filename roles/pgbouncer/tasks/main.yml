@@ -1,0 +1,60 @@
+---
+
+- name: yum | Install PgBouncer
+  yum:
+    name: "pgbouncer"
+    state: installed
+
+- name: Backup pgbouncer config
+  copy:
+    src: /etc/pgbouncer/pgbouncer.ini
+    dest: /etc/pgbouncer/pgbouncer.ini.bak
+    remote_src: yes
+
+- name: config pgbouncer
+  template:
+    src: files/pgbouncer.ini.j2
+    dest: /etc/pgbouncer/pgbouncer.ini
+
+- name: config postgres hostname for pgbench master
+  replace:
+    path: /etc/pgbouncer/pgbouncer.ini
+    regexp: 'POSTGRES_HOSTNAME_PLACEHOLDER'
+    replace: "{{ postgres_master }}"
+  when: ('pgbouncer_master' in group_names)
+
+- name: config postgres hostname for worker node
+  replace:
+    path: /etc/pgbouncer/pgbouncer.ini
+    regexp: 'POSTGRES_HOSTNAME_PLACEHOLDER'
+    replace: "127.0.0.1"
+  when: ('citus_worker' in group_names)
+
+- name: Touch userlist.txt file
+  file:
+    path: /etc/pgbouncer/userlist.txt
+    state: touch
+    group: pgbouncer
+    owner: pgbouncer
+
+- name: replace to trust # TODO It's citus bug, we need trust until https://github.com/citusdata/citus/issues/1822 is fixed
+  replace:
+    path: /etc/pgbouncer/pgbouncer.ini
+    regexp: "^auth_type = md5$"
+    replace: "auth_type = trust"
+  when: "'citus_worker' in group_names"
+
+- name: create pgbouncer userlist
+  shell: echo "\"{{db_user}}\" \"md5`echo -n "{{db_password}}{{db_user}}" | md5sum | awk '{print $1}'`\"" > /etc/pgbouncer/userlist.txt
+
+- name: create pgbouncer userlist 
+  lineinfile:
+    path: /etc/pgbouncer/userlist.txt
+    line: "\"postgres\" \"\""
+  when: "'citus_worker' in group_names"
+
+- name: Start PgBouncer
+  service:
+    name: pgbouncer
+    state: started
+    enabled: yes

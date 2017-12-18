@@ -1,9 +1,11 @@
 ---
-- name: Install PostgreSQL, Citus, repmgr
-  hosts: citus
+- name: Install PostgreSQL, Citus, repmgr and pgbouncer
+  hosts: postgres
   become: yes
   become_method: sudo
   roles:
     - postgresql
-
+    - { role: citus, when: "'citus' in group_names" }
+    - { role: pgbouncer, when: "'pgbouncer' in group_names" }
+    - { role: add_pgbouncer_to_citus, when: "'citus' in group_names" }
   environment: "{{env_proxy}}"

@@ -18,6 +18,6 @@
       become_method: sudo
       become_user: postgres
       shell: "psql -c 'ALTER EXTENSION citus UPDATE;' {{db_name}}"
-      when: "'citus_master_repl' not in group_names"
+      when: "'postgres_repl' not in group_names"
 
   environment: "{{env_proxy}}"

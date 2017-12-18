@@ -7,10 +7,10 @@ This ansible playbook will provisioning Postgres and Citus Extension to Master &
 
 ## How to run
 1. `$ cp hosts.example hosts`
-2. `$ cp ansible-extra-vars.json.example ansible-extra-vars.json`
+2. `$ cp ansible-extra-vars.yaml.example ansible-extra-vars.yaml`
 3. Define your master, replica and worker  in `hosts` file. This must be *public ip* or host name, so your machine can `ssh` to installed machine
-4. Define ansible extra variable in `ansible-extra-vars.json`. This must be *private ip*, so master will communicate to its worker internally.
-5. Run `ansible-playbook citus-playbook.yaml --extra-vars "@ansible-extra-vars.json""`
+4. Define ansible extra variable in `ansible-extra-vars.yaml`. This must be *private ip*, so master will communicate to its worker internally.
+5. Run `ansible-playbook citus-playbook.yaml --extra-vars "@ansible-extra-vars.yaml""`
 
 Remark: Feel free to contribute.
 
@@ -18,24 +18,22 @@ Remark: Feel free to contribute.
 - Currently, this playbook only support `CentOS 7`
 - Any node in `(10.0.0.0/8)` subnet is able to connect to PostgreSQL without authentication. This can be avoid after [this citus's issue](https://github.com/citusdata/citus/issues/1822) is fixed.
 - User created by this playbook is `SUPERUSER`
-- 
+ 
 ## How to Update Citus version
 
 You can update citus version by running ansible-playbook below. Please note that it require database restarted.
 
 ### Update Patch Version
 ```
-ansible-playbook citus-patch-upgrade.yaml --extra-vars "@ansible-extra-vars.json"
+ansible-playbook citus-patch-upgrade.yaml --extra-vars "@ansible-extra-vars.yaml"
 ```
 
 ### Update Minor Version
 ```
-ansible-playbook citus-minor-upgrade.yaml --extra-vars "@ansible-extra-vars.json"
+ansible-playbook citus-minor-upgrade.yaml --extra-vars "@ansible-extra-vars.yaml"
 ```
 
 Reference: https://docs.citusdata.com/en/v7.1/admin_guide/upgrading_citus.html#major-and-minor-version-upgrades
 
 
 ## TODO
-- Add PgBouncer
-- Clean up playbook. Each plugin should be in its own separate role.

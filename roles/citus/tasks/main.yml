@@ -1,0 +1,114 @@
+---
+
+- name: Download citus install script
+  get_url: 
+    url: https://install.citusdata.com/community/rpm.sh
+    dest: /tmp/citus-rpm.sh
+    mode: 0755
+
+- name: yum | Setup Citus repository for {{ ansible_distribution }}
+  shell: /tmp/citus-rpm.sh
+
+- name: yum | Install Citus
+  yum:
+    name: "{{ item }}"
+    state: installed
+  with_items:
+    - citus71_96
+  register: install_postgresql
+  tags: [db, postgresql]
+
+- name: add local TRUST for worker node # TODO It's citus bug, we need trust until https://github.com/citusdata/citus/issues/1822 is fixed
+  lineinfile:
+    path: /var/lib/pgsql/9.6/data/pg_hba.conf
+    line: "{{ item }}"
+  with_items:
+    - host    all             all             10.0.0.1/8            trust
+    - host    all             all             127.0.0.1/32            md5
+  notify:
+    - Restart PostgreSQL
+  when: "'citus_worker' in group_names"
+
+- name: Touch .pgpass file
+  file:
+    path: /var/lib/pgsql/.pgpass
+    state: touch
+    mode: 0600
+    group: postgres
+    owner: postgres
+
+- name: Add postgres credential in .pgpass file
+  lineinfile:
+    path: /var/lib/pgsql/.pgpass
+    line: "{{ item }}:5432:{{ db_name }}:{{ db_user }}:{{ db_password }}"
+  with_items:
+    - "{{ worker_list }}"
+
+- name: add citus in shared_preload_libraries
+  replace:
+    path: /var/lib/pgsql/9.6/data/postgresql.conf
+    regexp: "^shared_preload_libraries = (.*)"
+    replace: "shared_preload_libraries = 'citus,pg_stat_statements'"
+  notify:
+    - Restart PostgreSQL
+  when: ('postgres_master' in group_names) or ('postgres_repl' in group_names) or ('citus_worker' in group_names)
+
+- name: add citus shared_replication_factor, shard_count
+  lineinfile:
+    path: /var/lib/pgsql/9.6/data/postgresql.conf
+    line: "{{ item }}"
+  with_items:
+    - "citus.shard_replication_factor = {{ replication_factor }}"
+    - "citus.shard_count = {{ shard_count }}"
+  notify:
+    - Restart PostgreSQL
+  when: ('postgres_master' in group_names)
+
+- name: Trust postgres in Citus Master & Worker Nodes
+  replace:
+    dest: /var/lib/pgsql/9.6/data/pg_hba.conf
+    regexp: ^(host.*all.*all.*)(127.0.0.1\/32)(.*)ident$
+    replace: host\tall\tpostgres\t127.0.0.1/32\ttrust
+  notify:
+    - Restart PostgreSQL
+  tags: [db, postgresql]
+  when: ('postgres_master' in group_names) or ('citus_worker' in group_names)
+
+- name: yum | Start and Enable PostgreSQL
+  service:
+    name: postgresql-9.6
+    state: restarted
+  tags: [db, postgresql]
+
+## Init Database
+- name: Check if database existed
+  shell: psql -U postgres -h 127.0.0.1 -c "SELECT COUNT(*) FROM pg_database WHERE datname='{{ db_name }}'" | sed -n '3p' | sed -e 's/^[ \t]*//' # TODO
+  register: has_database
+  when: ('postgres_master' in group_names) or ('citus_worker' in group_names)
+
+- name: Create database only when no database
+  shell: psql -U postgres -h 127.0.0.1 -c "CREATE DATABASE \"{{ db_name }}\""
+  when: 
+    - ('postgres_master' in group_names) or ('citus_worker' in group_names)
+    - has_database.stdout == "0"
+
+- name: Create citus extension
+  shell: psql -U postgres -h 127.0.0.1 -c "CREATE EXTENSION IF NOT EXISTS citus" {{ db_name }}
+  when: ('postgres_master' in group_names) or ('citus_worker' in group_names)
+
+- name: Check if user existed
+  shell: psql -U postgres -h 127.0.0.1 -c "SELECT COUNT(*) FROM pg_roles WHERE rolname='{{ db_user }}'" | sed -n '3p' | sed -e 's/^[ \t]*//' # TODO
+  register: has_user
+  when: ('postgres_master' in group_names) or ('citus_worker' in group_names)
+
+- name: Create users
+  shell: psql -U postgres -h 127.0.0.1 -c "CREATE ROLE \"{{ db_user }}\" WITH SUPERUSER LOGIN PASSWORD '{{ db_password }}'"
+  when:
+    - ('postgres_master' in group_names) or ('citus_worker' in group_names)
+    - has_user.stdout == "0"
+  
+- name: Add worker in master
+  shell: psql -U postgres -h 127.0.0.1 -c "SELECT * from master_add_node('{{ item }}', 5432);" {{ db_name }}
+  with_items:
+    - "{{ worker_list }}"
+  when: "'postgres_master' in group_names"

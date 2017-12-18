@@ -1,3 +1,4 @@
 hosts
 *.retry
 ansible-extra-vars.json
+ansible-extra-vars.yaml

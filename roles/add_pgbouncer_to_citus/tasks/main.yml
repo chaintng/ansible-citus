@@ -1,0 +1,20 @@
+---
+- name: Remove worker in mater
+  shell: psql -U postgres -h 127.0.0.1 -c "SELECT * from master_remove_node('{{ item }}', 5432);" {{ db_name }}
+  with_items:
+    - "{{ worker_list }}"
+  when: "'postgres_master' in group_names"
+  ignore_errors: yes ## maybe, it's already remove earlier
+
+- name: Add worker in master with 6432 port (pgbench)
+  shell: psql -U postgres -h 127.0.0.1 -c "SELECT * from master_add_node('{{ item }}', 6432);" {{ db_name }}
+  with_items:
+    - "{{ worker_list }}"
+  when: "'postgres_master' in group_names"
+
+- name: Add postgres credential in .pgpass file
+  lineinfile:
+    path: /var/lib/pgsql/.pgpass
+    line: "{{ item }}:6432:{{ db_name }}:{{ db_user }}:{{ db_password }}"
+  with_items:
+    - "{{ worker_list }}"

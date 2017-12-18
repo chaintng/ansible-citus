@@ -1,0 +1,19 @@
+db_user: temp_user
+db_password: temp_password
+db_name: temp_db
+ssh_public_key:
+ssh_private_key: |
+  canbe
+  newline
+with_replica: true
+pghero_user: pghero
+pghero_password: PGHERO_PASSWORD
+max_connections: 1000
+shard_count: 32
+replication_factor: 2
+tuning_postgres: false
+postgres_master: x.x.x.x
+postgres_repl: y.y.y.y
+worker_list:
+  - a.a.a.a
+  - b.b.b.b

@@ -1,17 +1,25 @@
+[postgres:children]
+citus
+pgbouncer
+
 [citus:children]
-citus_master
+postgres_master
+postgres_repl
 citus_worker
 
-[citus_master:children]
-citus_master_main
-citus_master_repl
+[pgbouncer:children]
+pgbouncer_master
+citus_worker
 
-[citus_master_main]
+[postgres_master]
 x.x.x.x
 
-[citus_master_repl]
+[postgres_repl]
 y.y.y.y
 
 [citus_worker]
 a.a.a.a
 b.b.b.b
+
+[pgbouncer_master]
+z.z.z.z
