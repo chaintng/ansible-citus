@@ -75,6 +75,7 @@
   with_items:
     - "^#(shared_preload_libraries.*)$"
     - "^#(max_connections.*)$"
+    - "^#(max_prepared_transactions.*)$"
   notify:
     - Restart PostgreSQL
   when: ('postgres_master' in group_names) or ('citus_worker' in group_names)
@@ -87,6 +88,15 @@
   notify:
     - Restart PostgreSQL
   when: ('postgres_master' in group_names) or ('citus_worker' in group_names)
+
+- name: setting max_prepared_transactions for repmgr active node
+  replace:
+    path: /var/lib/pgsql/9.6/data/postgresql.conf
+    regexp: "^max_prepared_transactions = (.*)"
+    replace: "max_prepared_transactions = {{ max_connections * 2 }}"
+  notify:
+    - Restart PostgreSQL
+  when: ('postgres_master' in group_names)
 
 - name: setting log format prefix
   replace:
