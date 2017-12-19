@@ -1,6 +1,0 @@
----
-  - name: Restart PostgreSQL
-    service:
-      name: postgresql-9.6
-      state: restarted
-    tags: [db, postgresql]
