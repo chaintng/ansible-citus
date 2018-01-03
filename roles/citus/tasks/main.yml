@@ -96,6 +96,10 @@
   shell: psql -U postgres -h 127.0.0.1 -c "CREATE EXTENSION IF NOT EXISTS citus" {{ db_name }}
   when: ('postgres_master' in group_names) or ('citus_worker' in group_names)
 
+- name: Create pgstattuple extension
+  shell: psql -U postgres -h 127.0.0.1 -c "CREATE EXTENSION IF NOT EXISTS pgstattuple" {{ db_name }}
+  when: ('postgres_master' in group_names) or ('citus_worker' in group_names)
+
 - name: Check if user existed
   shell: psql -U postgres -h 127.0.0.1 -c "SELECT COUNT(*) FROM pg_roles WHERE rolname='{{ db_user }}'" | sed -n '3p' | sed -e 's/^[ \t]*//' # TODO
   register: has_user
