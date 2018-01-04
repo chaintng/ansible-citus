@@ -150,7 +150,7 @@
 - name: config semaphore value
   lineinfile:
     path: /etc/sysctl.d/90-sample.conf
-    line: "kernel.sem = 250 512000 100 2048"
+    line: "kernel.sem = 250 32000 32 200"
   when: 
     - tuning_postgres == true
     - ('postgres_master' in group_names) or ('citus_worker' in group_names)
