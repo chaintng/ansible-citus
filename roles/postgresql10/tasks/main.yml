@@ -40,7 +40,7 @@
   when: with_replica == true
 
 - name: yum | Initialize PostgreSQL
-  command: /usr/pgsql-10/bin/postgresql10-setup initdb
+  command: /usr/pgsql-10/bin/postgresql-10-setup initdb
   when: 
     - install_postgresql.changed
     - "('postgres_master' in group_names) or ('citus_worker' in group_names)"
