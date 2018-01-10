@@ -1,0 +1,8 @@
+---
+- name: Install Postgres with repmgr
+  hosts: postgres
+  become: yes
+  become_method: sudo
+  become_user: root
+  roles:
+    - postgresql
