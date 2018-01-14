@@ -65,7 +65,7 @@ max_client_conn = {{ max_connections }}
 ; is in use, in session pooling it needs to be the number of
 ; max clients you want to handle at any moment
 ; 20 is default value, but it is too low for citus create_distributed_table function
-default_pool_size = 500 
+default_pool_size = 1000 
 
 ; how many additional connection to allow in case of trouble
 reserve_pool_size = 5

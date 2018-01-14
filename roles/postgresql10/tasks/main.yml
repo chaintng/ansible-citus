@@ -11,7 +11,7 @@
     name: "{{ item }}"
     state: installed
   with_items:
-    - https://download.postgresql.org/pub/repos/yum/10/redhat/rhel-7-x86_64/pgdg-centos10-10-1.noarch.rpm
+    - https://download.postgresql.org/pub/repos/yum/10/redhat/rhel-7-x86_64/pgdg-centos10-10-2.noarch.rpm
     - http://packages.2ndquadrant.com/repmgr/yum-repo-rpms/repmgr-rhel-1.0-1.noarch.rpm
   when: ansible_distribution == "CentOS"
   tags: [db, postgresql]
