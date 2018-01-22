@@ -1,0 +1,4 @@
+.include /lib/systemd/system/pgbouncer.service
+
+[Service]
+LimitNOFILE=81920

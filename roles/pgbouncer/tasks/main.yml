@@ -11,6 +11,16 @@
     dest: /etc/pgbouncer/pgbouncer.ini.bak
     remote_src: yes
 
+- name: systemd pgbouncer override number open file limit
+  template:
+    src: files/pgbouncer.service
+    dest: /etc/systemd/system/pgbouncer.service
+
+- name: daemon-reload
+  systemd:
+    daemon_reload: yes
+    name: pgbouncer
+
 - name: config pgbouncer
   template:
     src: files/pgbouncer.ini.j2
