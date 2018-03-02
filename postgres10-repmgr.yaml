@@ -6,4 +6,5 @@
   become_user: root
   roles:
     - postgresql10
+    - { role: pgbouncer, when: "'pgbouncer' in group_names" }
   environment: "{{env_proxy}}"
