@@ -57,6 +57,11 @@
     - ('postgres_master' in group_names) or ('citus_worker' in group_names)
     - with_replica == true
 
+- name: systemctl postgres override number open file limit
+  template:
+    src: files/postgresql-9.6.service
+    dest: /etc/systemd/system/postgresql-9.6.service
+
 - name: include postgresql.replication.conf
   lineinfile:
     path: /var/lib/pgsql/10/data/postgresql.conf
