@@ -59,8 +59,8 @@
 
 - name: systemctl postgres override number open file limit
   template:
-    src: files/postgresql-9.6.service
-    dest: /etc/systemd/system/postgresql-9.6.service
+    src: files/postgresql-10.service
+    dest: /etc/systemd/system/postgresql-10.service
 
 - name: include postgresql.replication.conf
   lineinfile:

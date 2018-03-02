@@ -1,4 +1,0 @@
-.include /lib/systemd/system/postgresql-9.6.service
-
-[Service]
-LimitNOFILE=81920
